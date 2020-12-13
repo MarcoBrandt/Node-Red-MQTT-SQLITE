@@ -3,7 +3,10 @@ Simple Node-Red program to read from a MQTT input ja store it in a database. Thi
 
 Install Node-red: https://nodered.org/#get-started
 
-Install new nodes to your Node-Red pallette: Dashboard, Dashboard table and SQlite.
+Install new nodes to your Node-Red pallette: 
+- Dashboard (node-red-dashboard) 
+- Dashboard table (node-red-ui-table) 
+- SQlite (node-red-node-sqlite)
 
 Import the flows.json to your Node-Red and check the numbered notes in the flow screen.
 
