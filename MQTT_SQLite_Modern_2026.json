@@ -1,0 +1,535 @@
+[
+  {
+    "id": "modern_tab",
+    "type": "tab",
+    "label": "MQTT → SQLite (modern)",
+    "disabled": false,
+    "info": "Independent modernized flow. Import only this flow; no legacy dashboard dependency."
+  },
+  {
+    "id": "db_modern",
+    "type": "sqlitedb",
+    "db": "bt_data_v2.db",
+    "mode": "RWC"
+  },
+  {
+    "id": "broker_modern",
+    "type": "mqtt-broker",
+    "name": "Configure MQTT broker",
+    "broker": "localhost",
+    "port": "1883",
+    "clientid": "",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthPayload": "",
+    "closeTopic": "",
+    "closeQos": "0",
+    "closePayload": "",
+    "willTopic": "",
+    "willQos": "0",
+    "willPayload": ""
+  },
+  {
+    "id": "init_schema",
+    "type": "inject",
+    "z": "modern_tab",
+    "name": "Initialize schema on deploy",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "once": true,
+    "onceDelay": 0.5,
+    "topic": "CREATE TABLE IF NOT EXISTS scans (id INTEGER PRIMARY KEY AUTOINCREMENT, received_ms INTEGER NOT NULL, received_at TEXT NOT NULL, topic TEXT NOT NULL, data TEXT NOT NULL)",
+    "x": 170,
+    "y": 80,
+    "wires": [
+      [
+        "sql_schema"
+      ]
+    ]
+  },
+  {
+    "id": "sql_schema",
+    "type": "sqlite",
+    "z": "modern_tab",
+    "mydb": "db_modern",
+    "sqlquery": "msg.topic",
+    "sql": "",
+    "name": "Create scans table",
+    "x": 430,
+    "y": 80,
+    "wires": [
+      [
+        "sql_index"
+      ]
+    ]
+  },
+  {
+    "id": "sql_index",
+    "type": "function",
+    "z": "modern_tab",
+    "name": "Create time index",
+    "func": "msg.topic = 'CREATE INDEX IF NOT EXISTS idx_scans_received_ms ON scans(received_ms)';\nmsg.payload = [];\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "x": 650,
+    "y": 80,
+    "wires": [
+      [
+        "sql_idx"
+      ]
+    ]
+  },
+  {
+    "id": "sql_idx",
+    "type": "sqlite",
+    "z": "modern_tab",
+    "mydb": "db_modern",
+    "sqlquery": "msg.topic",
+    "sql": "",
+    "name": "Create time index",
+    "x": 860,
+    "y": 80,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "mqtt_input",
+    "type": "mqtt in",
+    "z": "modern_tab",
+    "name": "ESP32 MQTT input",
+    "topic": "/esp32/#",
+    "qos": "1",
+    "datatype": "auto",
+    "broker": "broker_modern",
+    "inputs": 0,
+    "x": 150,
+    "y": 170,
+    "wires": [
+      [
+        "prepare_insert"
+      ]
+    ]
+  },
+  {
+    "id": "prepare_insert",
+    "type": "function",
+    "z": "modern_tab",
+    "name": "Validate and bind values",
+    "func": "// Accept one identifier per MQTT message. SQL parameters are bound separately.\nif (typeof msg.payload !== \"string\" && typeof msg.payload !== \"number\") {\n    node.warn(\"Ignored MQTT payload that is not a string or number\");\n    return null;\n}\nconst data = String(msg.payload).trim();\nconst topic = String(msg.topic || \"\");\nif (!data || data.length > 512 || !topic || topic.length > 256) {\n    node.warn(\"Ignored empty or oversized MQTT data/topic\");\n    return null;\n}\nconst now = new Date();\nmsg.topic = \"INSERT INTO scans (received_ms, received_at, topic, data) VALUES (?, ?, ?, ?)\";\nmsg.payload = [now.getTime(), now.toISOString(), topic, data];\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "x": 395,
+    "y": 170,
+    "wires": [
+      [
+        "sql_insert"
+      ]
+    ]
+  },
+  {
+    "id": "sql_insert",
+    "type": "sqlite",
+    "z": "modern_tab",
+    "mydb": "db_modern",
+    "sqlquery": "msg.topic",
+    "sql": "",
+    "name": "Insert scan (bound parameters)",
+    "x": 660,
+    "y": 170,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "http0",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data",
+    "url": "/data",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 310,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http1",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/all/count",
+    "url": "/data/all/count",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 354,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http2",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/all/unique",
+    "url": "/data/all/unique",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 398,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http3",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/all/uniquedata",
+    "url": "/data/all/uniquedata",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 442,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http4",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/all/unique/count",
+    "url": "/data/all/unique/count",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 486,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http5",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/today",
+    "url": "/data/today",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 530,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http6",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/today/count",
+    "url": "/data/today/count",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 574,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http7",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/today/unique",
+    "url": "/data/today/unique",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 618,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http8",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/today/uniquedata",
+    "url": "/data/today/uniquedata",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 662,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http9",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/today/unique/count",
+    "url": "/data/today/unique/count",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 706,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http10",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/week",
+    "url": "/data/week",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 750,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http11",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/week/count",
+    "url": "/data/week/count",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 794,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http12",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/week/unique",
+    "url": "/data/week/unique",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 838,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http13",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/week/uniquedata",
+    "url": "/data/week/uniquedata",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 882,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http14",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/week/unique/count",
+    "url": "/data/week/unique/count",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 926,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "http15",
+    "type": "http in",
+    "z": "modern_tab",
+    "name": "/data/livefeed",
+    "url": "/data/livefeed",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 970,
+    "wires": [
+      [
+        "api_router"
+      ]
+    ]
+  },
+  {
+    "id": "api_router",
+    "type": "function",
+    "z": "modern_tab",
+    "name": "Allowlisted SQL + bounded params",
+    "func": "// Route through a fixed, allowlisted SQL map; user input never becomes SQL text.\nconst routes = {\n  \"/data\": {\n    \"window\": \"all\",\n    \"kind\": \"rows\",\n    \"sql\": \"SELECT id, received_at, topic, data FROM scans ORDER BY received_ms DESC, id DESC LIMIT ?\"\n  },\n  \"/data/all/count\": {\n    \"window\": \"all\",\n    \"kind\": \"count\",\n    \"sql\": \"SELECT COUNT(*) AS count FROM scans\"\n  },\n  \"/data/all/unique\": {\n    \"window\": \"all\",\n    \"kind\": \"unique\",\n    \"sql\": \"SELECT data, COUNT(*) AS sightings, MIN(received_at) AS first_seen, MAX(received_at) AS last_seen FROM scans GROUP BY data ORDER BY MAX(received_ms) DESC LIMIT ?\"\n  },\n  \"/data/all/uniquedata\": {\n    \"window\": \"all\",\n    \"kind\": \"uniquedata\",\n    \"sql\": \"SELECT data, COUNT(*) AS sightings, MIN(received_at) AS first_seen, MAX(received_at) AS last_seen FROM scans GROUP BY data ORDER BY MAX(received_ms) DESC LIMIT ?\"\n  },\n  \"/data/all/unique/count\": {\n    \"window\": \"all\",\n    \"kind\": \"uniquecount\",\n    \"sql\": \"SELECT COUNT(DISTINCT data) AS count FROM scans\"\n  },\n  \"/data/today\": {\n    \"window\": \"today\",\n    \"kind\": \"rows\",\n    \"sql\": \"SELECT id, received_at, topic, data FROM scans WHERE received_ms >= ? ORDER BY received_ms DESC, id DESC LIMIT ?\"\n  },\n  \"/data/today/count\": {\n    \"window\": \"today\",\n    \"kind\": \"count\",\n    \"sql\": \"SELECT COUNT(*) AS count FROM scans WHERE received_ms >= ?\"\n  },\n  \"/data/today/unique\": {\n    \"window\": \"today\",\n    \"kind\": \"unique\",\n    \"sql\": \"SELECT data, COUNT(*) AS sightings, MIN(received_at) AS first_seen, MAX(received_at) AS last_seen FROM scans WHERE received_ms >= ? GROUP BY data ORDER BY MAX(received_ms) DESC LIMIT ?\"\n  },\n  \"/data/today/uniquedata\": {\n    \"window\": \"today\",\n    \"kind\": \"uniquedata\",\n    \"sql\": \"SELECT data, COUNT(*) AS sightings, MIN(received_at) AS first_seen, MAX(received_at) AS last_seen FROM scans WHERE received_ms >= ? GROUP BY data ORDER BY MAX(received_ms) DESC LIMIT ?\"\n  },\n  \"/data/today/unique/count\": {\n    \"window\": \"today\",\n    \"kind\": \"uniquecount\",\n    \"sql\": \"SELECT COUNT(DISTINCT data) AS count FROM scans WHERE received_ms >= ?\"\n  },\n  \"/data/week\": {\n    \"window\": \"week\",\n    \"kind\": \"rows\",\n    \"sql\": \"SELECT id, received_at, topic, data FROM scans WHERE received_ms >= ? ORDER BY received_ms DESC, id DESC LIMIT ?\"\n  },\n  \"/data/week/count\": {\n    \"window\": \"week\",\n    \"kind\": \"count\",\n    \"sql\": \"SELECT COUNT(*) AS count FROM scans WHERE received_ms >= ?\"\n  },\n  \"/data/week/unique\": {\n    \"window\": \"week\",\n    \"kind\": \"unique\",\n    \"sql\": \"SELECT data, COUNT(*) AS sightings, MIN(received_at) AS first_seen, MAX(received_at) AS last_seen FROM scans WHERE received_ms >= ? GROUP BY data ORDER BY MAX(received_ms) DESC LIMIT ?\"\n  },\n  \"/data/week/uniquedata\": {\n    \"window\": \"week\",\n    \"kind\": \"uniquedata\",\n    \"sql\": \"SELECT data, COUNT(*) AS sightings, MIN(received_at) AS first_seen, MAX(received_at) AS last_seen FROM scans WHERE received_ms >= ? GROUP BY data ORDER BY MAX(received_ms) DESC LIMIT ?\"\n  },\n  \"/data/week/unique/count\": {\n    \"window\": \"week\",\n    \"kind\": \"uniquecount\",\n    \"sql\": \"SELECT COUNT(DISTINCT data) AS count FROM scans WHERE received_ms >= ?\"\n  },\n  \"/data/livefeed\": {\n    \"window\": \"all\",\n    \"kind\": \"live\",\n    \"sql\": \"SELECT id, received_at, topic, data FROM scans ORDER BY received_ms DESC, id DESC LIMIT ?\"\n  }\n};\nconst path = msg.req && msg.req.path;\nconst r = routes[path];\nif (!r) { msg.statusCode = 404; msg.payload = {error:\"Not found\"}; return [null,msg]; }\nconst now = new Date();\nconst today = new Date(now.getTime());\ntoday.setHours(0,0,0,0); // Node-RED server local timezone; set TZ explicitly.\nconst start = r.window === \"today\" ? today.getTime()\n            : r.window === \"week\" ? now.getTime() - 7*24*60*60*1000 : null;\nconst rawLimit = msg.req && msg.req.query && msg.req.query.limit;\nconst n = Number(rawLimit || 200);\nif (!Number.isSafeInteger(n) || n < 1 || n > 1000) {\n    msg.statusCode = 400;\n    msg.payload = {error:\"limit must be an integer between 1 and 1000\"};\n    return [null,msg];\n}\nmsg.topic = r.sql;\nmsg.payload = [];\nif (start !== null) msg.payload.push(start);\nif (r.kind === \"rows\" || r.kind === \"unique\" || r.kind === \"uniquedata\") msg.payload.push(n);\nif (r.kind === \"live\") msg.payload.push(Math.min(n,20));\nreturn [msg,null];",
+    "outputs": 2,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "x": 440,
+    "y": 510,
+    "wires": [
+      [
+        "sql_read"
+      ],
+      [
+        "http_response"
+      ]
+    ]
+  },
+  {
+    "id": "sql_read",
+    "type": "sqlite",
+    "z": "modern_tab",
+    "mydb": "db_modern",
+    "sqlquery": "msg.topic",
+    "sql": "",
+    "name": "Run read-only SELECT",
+    "x": 690,
+    "y": 510,
+    "wires": [
+      [
+        "api_reply"
+      ]
+    ]
+  },
+  {
+    "id": "api_reply",
+    "type": "function",
+    "z": "modern_tab",
+    "name": "JSON response",
+    "func": "msg.headers = {'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store'};\nmsg.statusCode = 200;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "x": 920,
+    "y": 510,
+    "wires": [
+      [
+        "http_response"
+      ]
+    ]
+  },
+  {
+    "id": "http_response",
+    "type": "http response",
+    "z": "modern_tab",
+    "name": "HTTP response",
+    "statusCode": "",
+    "headers": {},
+    "x": 1110,
+    "y": 510,
+    "wires": []
+  },
+  {
+    "id": "sqlite_catch",
+    "type": "catch",
+    "z": "modern_tab",
+    "name": "Database error",
+    "scope": [
+      "sql_schema",
+      "sql_idx",
+      "sql_insert",
+      "sql_read"
+    ],
+    "uncaught": false,
+    "x": 200,
+    "y": 1050,
+    "wires": [
+      [
+        "error_handler"
+      ]
+    ]
+  },
+  {
+    "id": "error_handler",
+    "type": "function",
+    "z": "modern_tab",
+    "name": "Log / safe HTTP error",
+    "func": "node.error('SQLite error: ' + (msg.error && msg.error.message || 'unknown'));\nif (!msg.res) return null;\nmsg.statusCode = 500;\nmsg.headers = {'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store'};\nmsg.payload = {error:'Database operation failed'};\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "x": 465,
+    "y": 1050,
+    "wires": [
+      [
+        "http_response"
+      ]
+    ]
+  }
+]
